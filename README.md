@@ -16,12 +16,10 @@ ninja -C build install
 ```
 
 Second, tell Taskwarrior to call logwarrior's hook when a task is modified.  
-This can be done by writing the following file into your Taskwarrior hooks directory
-(e.g., as `~/.task/hooks/on-modify-logwarrior`):
+This is done by placing an executable file or script into your Taskwarrior hooks directory (default is `~/.task/hooks/`).
 
-``` sh
-#!/usr/bin/env sh
-logwarrior-hook
+``` bash
+ln -s $(realpath $(which logwarrior-hook)) ~/.task/hooks/on-modify-logwarrior
 ```
 
 ## Usage
