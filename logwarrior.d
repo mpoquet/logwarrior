@@ -46,6 +46,16 @@ in(tasks.length > 0, "there should be tasks to query")
     return info;
 }
 
+Duration round(Duration duration)
+{
+    auto rounded = dur!"minutes"(duration.total!"minutes");
+    if (rounded.toString == "0 hnsecs")
+    {
+        rounded = dur!"seconds"(duration.total!"seconds");
+    }
+    return rounded;
+}
+
 void showActiveTasks()
 {
     auto tasks = retrieveActiveTasks;
@@ -57,8 +67,7 @@ void showActiveTasks()
         foreach (task; tasks)
         {
             auto duration = Clock.currTime - SysTime.fromISOExtString(task.startDate);
-            auto roundedDuration = dur!"minutes"(duration.total!"minutes");
-            writefln("'%s' for %s (uuid='%s')", info[task.uuid]["description"].str, roundedDuration, task.uuid);
+            writefln("'%s' for %s (uuid='%s')", info[task.uuid]["description"].str, duration.round, task.uuid);
         }
     }
 }
