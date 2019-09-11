@@ -7,8 +7,8 @@ with pkgs;
 
 let
   self = rec {
-    logwarrior-hook = stdenv.mkDerivation rec {
-      pname = "logwarrior-hook";
+    logwarrior = stdenv.mkDerivation rec {
+      pname = "logwarrior";
       version = "0.1.0";
 
       src = ./.;
@@ -16,4 +16,4 @@ let
     };
   };
 in
-  self.logwarrior-hook
+  self.logwarrior
