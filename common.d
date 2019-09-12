@@ -1,10 +1,25 @@
+import std.datetime;
 import std.process;
 import std.path;
 
-struct ActiveEntry
+struct ActiveTaskEntry
 {
     string uuid;
     string startDate;
+}
+
+struct WorkIntervalEntry
+{
+    string uuid;
+    string startDate;
+    string endDate;
+}
+
+struct WorkInterval
+{
+    string uuid;
+    SysTime startDate;
+    SysTime endDate;
 }
 
 static immutable string ACTIVE_FILENAME = ".logw-active.csv";

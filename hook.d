@@ -27,7 +27,7 @@ string retrieveTaskStartDate(string activeFilename, string uuid)
     auto f = File(activeFilename, "r");
     scope(exit) f.close();
 
-    foreach (entry; f.byLine.joiner("\n").csvReader!ActiveEntry)
+    foreach (entry; f.byLine.joiner("\n").csvReader!ActiveTaskEntry)
     {
         if (entry.uuid == uuid)
             return entry.startDate;
@@ -42,7 +42,7 @@ void removeActiveTask(string activeFilename, string uuid)
     string tmpFilename = tempDir ~ "/" ~ ACTIVE_FILENAME;
     auto tmp = File(tmpFilename, "w");
 
-    foreach (entry; f.byLine.joiner("\n").csvReader!ActiveEntry)
+    foreach (entry; f.byLine.joiner("\n").csvReader!ActiveTaskEntry)
     {
         if (entry.uuid != uuid)
             tmp.writefln("%s,%s", entry.uuid, entry.startDate);

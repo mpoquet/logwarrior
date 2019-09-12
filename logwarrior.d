@@ -9,11 +9,12 @@ import std.json;
 import std.process;
 import std.range;
 import std.stdio;
+import std.string;
 import common;
 
 alias TaskInformation = JSONValue;
 
-ActiveEntry[] retrieveActiveTasks()
+ActiveTaskEntry[] retrieveActiveTasks()
 {
     try
     {
@@ -21,7 +22,7 @@ ActiveEntry[] retrieveActiveTasks()
         auto f = File(activeFilename, "r");
         scope(exit) f.close();
 
-        foreach (entry; f.byLine.joiner("\n").csvReader!ActiveEntry)
+        foreach (entry; f.byLine.joiner("\n").csvReader!ActiveTaskEntry)
         {
             entries ~= entry;
         }
@@ -34,7 +35,35 @@ ActiveEntry[] retrieveActiveTasks()
     }
 }
 
-TaskInformation[string] queryTaskInformation(ActiveEntry[] tasks)
+WorkInterval[] retrieveWorkIntervals()
+{
+    try
+    {
+        WorkIntervalEntry[] entries;
+        auto f = File(intervalsFilename, "r");
+        scope(exit) f.close();
+
+        foreach (entry; f.byLine.joiner("\n").csvReader!WorkIntervalEntry)
+        {
+            entries ~= entry;
+        }
+
+        typeof(return) intervals;
+        foreach (entry ; entries[1..$])
+        {
+            intervals ~= WorkInterval(entry.uuid,
+                SysTime.fromISOExtString(entry.startDate),
+                SysTime.fromISOExtString(entry.endDate));
+        }
+        return intervals;
+    }
+    catch(ErrnoException e)
+    {
+        return [];
+    }
+}
+
+TaskInformation[string] queryTaskInformation(T)(T[] tasks)
 in(tasks.length > 0, "there should be tasks to query")
 {
     typeof(return) info;
@@ -46,6 +75,107 @@ in(tasks.length > 0, "there should be tasks to query")
         info[task["uuid"].str] = task;
     }
     return info;
+}
+
+bool isScalar(JSONValue v)
+{
+    return (v.type == JSONType.string) ||
+           (v.type == JSONType.integer) ||
+           (v.type == JSONType.float_) ||
+           (v.type == JSONType.true_) ||
+           (v.type == JSONType.false_);
+}
+
+string asString(JSONValue v)
+{
+    switch(v.type)
+    {
+        case JSONType.string: return format!`"%s"`(v.str.tr(`"`, `""`));
+        case JSONType.integer: return to!string(v.integer);
+        case JSONType.float_: return to!string(v.floating);
+        case JSONType.true_: return to!string(true);
+        case JSONType.false_: return to!string(false);
+        default: throw new Exception(format!"%s is not scalar"(v));
+    }
+}
+
+string[string][] flattenArrays(TaskInformation info)
+{
+    typeof(return) flattened;
+
+    string[string] toPreserve;
+    foreach(key, value; info.object)
+    {
+        if (value.isScalar)
+            toPreserve[key] = value.asString;
+    }
+
+    if ("tags" in info.object)
+    {
+        string[] tags;
+        foreach (tag; info.object["tags"].array)
+            tags ~= tag.asString;
+
+        foreach (tag; tags)
+        {
+            auto element = toPreserve.dup;
+            element["tag"] = tag;
+            flattened ~= element;
+        }
+    }
+    else
+        flattened ~= toPreserve;
+
+    return flattened;
+}
+
+string generateExportCSV(WorkInterval[] intervals, string[string][][string] infos)
+{
+    static immutable string NA = `"NA"`;
+
+    // List all keys.
+    bool[string] keys;
+    foreach (uuid, info; infos)
+    {
+        foreach (i; info)
+        {
+            foreach (key; i.keys)
+            {
+                if (key !in keys)
+                    keys[key] = true;
+            }
+        }
+    }
+
+    // Define a CSV key order.
+    auto sortedKeys = ["interval_start", "interval_end", "uuid", "project", "tag", "description"];
+    foreach (key; keys.keys)
+    {
+        if (!sortedKeys.canFind(key))
+            sortedKeys ~= key;
+    }
+
+    // Generate rows.
+    string[] rows;
+    rows ~= sortedKeys.join(",");
+
+    foreach (interval; intervals)
+    {
+        foreach (info; infos[interval.uuid])
+        {
+            string row = format!"%s,%s,%s"(interval.startDate, interval.endDate, interval.uuid);
+
+            foreach(key; sortedKeys[3..$])
+            {
+                string value = (key in info) ? info[key] : NA;
+                row ~= "," ~ value;
+            }
+
+            rows ~= row;
+        }
+    }
+
+    return rows.join("\n");
 }
 
 Duration roundMinuteOrSecond(Duration duration)
@@ -128,43 +258,59 @@ int main(string[] args)
                 showActiveTasks();
                 break;
             case "export":
+                enforce(commandArgs.length <= 1, "The 'export' command expect 0 or 1 argument.");
                 auto startDate = Clock.currTime;
                 auto endDate = startDate;
 
-                if (commandArgs.length > 0)
-                {
-                    auto intervalString = commandArgs[0];
-                    switch(intervalString)
-                    {
-                        case "day":
-                            startDate = startDate.roundDay;
-                            break;
-                        case "week":
-                            startDate -= dur!"days"(daysToDayOfWeek(DayOfWeek.mon, startDate.dayOfWeek));
-                            startDate = startDate.roundDay;
-                            break;
-                        case "month":
-                            startDate = startDate.roundMonth;
-                            break;
-                        default:
-                            auto startDateString = "";
-                            auto endDateString = endDate.toISOExtString;
-                            if (intervalString.canFind(".."))
-                            {
-                                auto s = intervalString.split("..");
-                                startDateString = s[0];
-                                endDateString = s[1];
-                            }
-                            else
-                                startDateString = intervalString;
+                if (commandArgs.empty)
+                    commandArgs ~= "day";
 
-                            startDate = fromAnyDateTimeString(startDateString);
-                            endDate = fromAnyDateTimeString(endDateString);
-                    }
+                auto intervalString = commandArgs[0];
+                switch(intervalString)
+                {
+                    case "day":
+                        startDate = startDate.roundDay;
+                        break;
+                    case "week":
+                        startDate -= dur!"days"(daysToDayOfWeek(DayOfWeek.mon, startDate.dayOfWeek));
+                        startDate = startDate.roundDay;
+                        break;
+                    case "month":
+                        startDate = startDate.roundMonth;
+                        break;
+                    default:
+                        auto startDateString = "";
+                        auto endDateString = endDate.toISOExtString;
+                        if (intervalString.canFind(".."))
+                        {
+                            auto s = intervalString.split("..");
+                            startDateString = s[0];
+                            endDateString = s[1];
+                        }
+                        else
+                            startDateString = intervalString;
+
+                        startDate = fromAnyDateTimeString(startDateString);
+                        endDate = fromAnyDateTimeString(endDateString);
                 }
-                writeln(startDate);
-                writeln(endDate);
-                enforce(false, "The 'export' command is not implemented yet.");
+                auto intervals = retrieveWorkIntervals();
+                auto selectedIntervals = intervals.filter!(a => (a.startDate >= startDate &&
+                                                           a.endDate <= endDate)).array;
+                if (selectedIntervals.empty)
+                {
+                    writeln("interval_start,interval_end,uuid");
+                    break;
+                }
+
+                auto infos = queryTaskInformation(selectedIntervals);
+                string[string][][string] flattenedInfos;
+                foreach (uuid, info; infos)
+                {
+                    flattenedInfos[uuid] = flattenArrays(info);
+                }
+
+                auto exportString = generateExportCSV(selectedIntervals, flattenedInfos);
+                writeln(exportString);
                 break;
             default:
                 enforce(false, format!"Unknown '%s' command."(command));
