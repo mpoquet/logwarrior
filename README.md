@@ -1,5 +1,6 @@
 # logwarrior
-**logwarrior** logs when you work on your [Taskwarrior](https://taskwarrior.org/) tasks.
+**logwarrior** logs when you work on your [Taskwarrior](https://taskwarrior.org/) tasks,
+and provides a command-line tool to retrieve your work intervals in CSV format.
 
 This is done thanks to a [hook](https://taskwarrior.org/docs/hooks.html) called on `task start` and `task stop` commands.
 
@@ -23,10 +24,16 @@ ln -s $(realpath $(which logwarrior-hook)) ~/.task/hooks/on-modify-logwarrior
 ```
 
 ## Usage
-This is transparent.
+Hook use is transparent.
 Just run `task start` and `task stop` as usual — or let any other program
 (e.g., [patata](https://github.com/rrmelcer/patata)) do it for you.
 
+logwarrior's database queries are done via the `logwarrior` program,
+which supports several commands (run `logwarrior --help` for full usage).
+- `show` shows active tasks — tasks tracked as started by logwarrior.
+- `export` exports finished work intervals in a CSV format. Metadata are retrieved from Taskwarrior and joined in logwarrior's data.
+
+## Data storage
 Log files are stored in logwarrior's data directory and formatted as
 [CSV](https://fr.wikipedia.org/wiki/Comma-separated_values).
 logwarrior simply stores task unique ids with their work intervals in a single file.
